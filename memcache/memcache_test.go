@@ -18,14 +18,12 @@ limitations under the License.
 package memcache
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -395,33 +393,60 @@ func testTouchWithClient(t *testing.T, c *Client) {
 	}
 }
 
-func BenchmarkOnItem(b *testing.B) {
-	fakeServer, err := net.Listen("tcp", "localhost:0")
+// BenchmarkSet measures the overhead of the command path against a local
+// in-process testServer, exercising the full encode/pipeline/decode loop.
+func BenchmarkSet(b *testing.B) {
+	ln, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
-		b.Fatal("Could not open fake server: ", err)
+		b.Fatal("Could not open listener: ", err)
 	}
-	defer fakeServer.Close()
-	go func() {
-		for {
-			if c, err := fakeServer.Accept(); err == nil {
-				go func() { io.Copy(ioutil.Discard, c) }()
-			} else {
-				return
-			}
-		}
-	}()
+	defer ln.Close()
+	srv := &testServer{}
+	go srv.Serve(ln)
 
-	addr := fakeServer.Addr()
-	c := New(addr.String())
-	if _, err := c.getConn(addr); err != nil {
-		b.Fatal("failed to initialize connection to fake server")
-	}
+	c := New(ln.Addr().String())
+	defer c.Close()
 
-	item := Item{Key: "foo"}
-	dummyFn := func(_ *Client, _ *bufio.ReadWriter, _ *Item) error { return nil }
+	item := &Item{Key: "foo", Value: []byte("bar")}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c.onItem(&item, dummyFn)
+		if err := c.Set(item); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// TestAddrBackendKeyAllocs guards the hot-path map-key extraction against
+// regressions that introduce allocations (e.g. re-adding addr.String() for a
+// case handled by a type switch).
+func TestAddrBackendKeyAllocs(t *testing.T) {
+	tcp, err := net.ResolveTCPAddr("tcp", "127.0.0.1:11211")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unix, err := net.ResolveUnixAddr("unix", "/tmp/gomemcache.sock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	static := newStaticAddr(tcp) // what ServerList produces
+
+	cases := []struct {
+		name string
+		addr net.Addr
+	}{
+		{"TCPAddr", tcp},
+		{"staticAddr", static},
+		{"UnixAddr", unix},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := testing.AllocsPerRun(1000, func() {
+				_ = addrBackendKey(tc.addr)
+			})
+			if got != 0 {
+				t.Errorf("addrBackendKey(%T) allocs = %v; want 0", tc.addr, got)
+			}
+		})
 	}
 }
 
