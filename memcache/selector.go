@@ -17,9 +17,7 @@ limitations under the License.
 package memcache
 
 import (
-	"hash/crc32"
 	"net"
-	"strings"
 	"sync"
 )
 
@@ -46,60 +44,28 @@ type staticAddr struct {
 	ntw, str string
 }
 
-func newStaticAddr(a net.Addr) net.Addr {
-	return &staticAddr{
-		ntw: a.Network(),
-		str: a.String(),
-	}
+func newStaticAddr(a net.Addr) net.Addr { _ = "STUB: not implemented"; return *new(net.Addr) }
+
+func (s *staticAddr) Network() string { _ = "STUB: not implemented"; return "" }
+func (s *staticAddr) String() string {
+	_ = "STUB: not implemented"
+
+	// SetServers changes a ServerList's set of servers at runtime and is
+	// safe for concurrent use by multiple goroutines.
+	//
+	// Each server is given equal weight. A server is given more weight
+	// if it's listed multiple times.
+	//
+	// SetServers returns an error if any of the server names fail to
+	// resolve. No attempt is made to connect to the server. If any error
+	// is returned, no changes are made to the ServerList.
+	return ""
 }
 
-func (s *staticAddr) Network() string { return s.ntw }
-func (s *staticAddr) String() string  { return s.str }
-
-// SetServers changes a ServerList's set of servers at runtime and is
-// safe for concurrent use by multiple goroutines.
-//
-// Each server is given equal weight. A server is given more weight
-// if it's listed multiple times.
-//
-// SetServers returns an error if any of the server names fail to
-// resolve. No attempt is made to connect to the server. If any error
-// is returned, no changes are made to the ServerList.
-func (ss *ServerList) SetServers(servers ...string) error {
-	naddr := make([]net.Addr, len(servers))
-	for i, server := range servers {
-		if strings.Contains(server, "/") {
-			addr, err := net.ResolveUnixAddr("unix", server)
-			if err != nil {
-				return err
-			}
-			naddr[i] = newStaticAddr(addr)
-		} else {
-			tcpaddr, err := net.ResolveTCPAddr("tcp", server)
-			if err != nil {
-				return err
-			}
-			naddr[i] = newStaticAddr(tcpaddr)
-		}
-	}
-
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	ss.addrs = naddr
-	return nil
-}
+func (ss *ServerList) SetServers(servers ...string) error { _ = "STUB: not implemented"; return nil }
 
 // Each iterates over each server calling the given function
-func (ss *ServerList) Each(f func(net.Addr) error) error {
-	ss.mu.RLock()
-	defer ss.mu.RUnlock()
-	for _, a := range ss.addrs {
-		if err := f(a); nil != err {
-			return err
-		}
-	}
-	return nil
-}
+func (ss *ServerList) Each(f func(net.Addr) error) error { _ = "STUB: not implemented"; return nil }
 
 // keyBufPool returns []byte buffers for use by PickServer's call to
 // crc32.ChecksumIEEE to avoid allocations. (but doesn't avoid the
@@ -112,18 +78,6 @@ var keyBufPool = sync.Pool{
 }
 
 func (ss *ServerList) PickServer(key string) (net.Addr, error) {
-	ss.mu.RLock()
-	defer ss.mu.RUnlock()
-	if len(ss.addrs) == 0 {
-		return nil, ErrNoServers
-	}
-	if len(ss.addrs) == 1 {
-		return ss.addrs[0], nil
-	}
-	bufp := keyBufPool.Get().(*[]byte)
-	n := copy(*bufp, key)
-	cs := crc32.ChecksumIEEE((*bufp)[:n])
-	keyBufPool.Put(bufp)
-
-	return ss.addrs[cs%uint32(len(ss.addrs))], nil
+	_ = "STUB: not implemented"
+	return *new(net.Addr), nil
 }
